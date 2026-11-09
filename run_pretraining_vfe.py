@@ -365,7 +365,7 @@ class VolumeFeatureEncoder(nn.Module, VolumeEncoderBase):
 
     def load_bridge(self, weights):
         checkpoint = torch.load(weights, map_location=self.device, weights_only=False)
-        self.resampler.load_state_dict(checkpoint['resampler'])
+        self.resampler.load_state_dict(checkpoint['patch_aggregator'])
         self.lesion_aggregator.load_state_dict(checkpoint['lesion_aggregator'])
         if self.args.use_proj:
             self.projection.load_state_dict(checkpoint['projection'])
@@ -386,7 +386,7 @@ class ReportModelRunner(VolumeEncoderBase):
 
     def load_weights(self, weights, device):
         checkpoint = torch.load(weights, map_location=device, weights_only=False)
-        self.resampler.load_state_dict(checkpoint['resampler'])
+        self.resampler.load_state_dict(checkpoint['patch_aggregator'])
         self.lesion_aggregator.load_state_dict(checkpoint['lesion_aggregator'])
         self.projection.load_state_dict(checkpoint['projection'])
 
@@ -670,7 +670,7 @@ class ReportModelTrainer(ReportModelRunner):
             print(f"Epoch {epoch+1} Average Loss: {avg_loss:.4f}")
             torch.save({
                 'epoch': epoch,
-                'resampler': self.resampler.state_dict(),
+                'patch_aggregator': self.resampler.state_dict(),
                 'lesion_aggregator': self.lesion_aggregator.state_dict(),
                 'projection': self.projection.state_dict(),
                 'optimizer': self.optimizer.state_dict(),

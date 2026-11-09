@@ -135,7 +135,7 @@ class Aggregator(nn.Module):
 
 class CLIFO(nn.Module):
     """Takes volumes [S, H, W] (numpy) and returns pooled features [N, 1536]."""
-    def __init__(self, device='cuda', weights='_weights/CLIFO_B.pth', bridge='_weights/CLIFO_VFE.pth'):
+    def __init__(self, device='cuda', weights='_weights/CLIFO.pth', bridge='_weights/CLIFO_VFE.pt'):
         super().__init__()
         self.device = device
         self.vm = Encoder()
