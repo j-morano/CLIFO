@@ -1,0 +1,7 @@
+torch>=2.15
+numpy
+einops
+# only needed for the demo in __main__ (feature extraction + t-SNE)
+tqdm
+scikit-learn
+matplotlib

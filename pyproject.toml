@@ -1,0 +1,52 @@
+[project]
+name = "clifo"
+version = "0.1.0"
+description = "CLIFO: CLInically guided Foundation model for retinal OCT"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "CC-BY-NC-4.0"
+dependencies = [
+    "torch==2.11.*",
+    "torchvision==0.26.*",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scipy>=1.14",
+    "scikit-learn>=1.5",
+    "scikit-image>=0.24",
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+    "timm==0.4.12",          # the MAE / MultiMAE code relies on the old timm API
+    "einops>=0.8",
+    "transformers>=5.3",
+    "accelerate>=1.0",
+    "tqdm>=4.66",
+    "pyyaml>=6.0",
+    "pillow>=10.2",
+    "joblib>=1.4",
+    "h5py>=3.11",
+    "iopath>=0.1.10",
+]
+
+[project.optional-dependencies]
+# Needed to run the OCTCube baseline (its blocks use FlashAttention). Compiles against the installed torch:
+#   uv sync && uv sync --extra octcube
+octcube = ["flash-attn==2.8.3"]
+# Report-generation metrics (BLEU, ROUGE-L)
+report = ["nltk>=3.9", "rouge-score>=0.1.2"]
+# Conversion of the original datasets (data_processing/)
+data = ["eyepy", "openpyxl"]
+# Experiment logging during pretraining (optional)
+logging = ["wandb"]
+
+[tool.uv]
+package = false
+no-build-isolation-package = ["flash-attn"]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
