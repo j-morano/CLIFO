@@ -298,7 +298,7 @@ class CLIFOVolumeFM(FoundModel3D):
             args.pool = 'none'
         model_args = VolumeEncoderArgs(
             num_queries=16,
-            resampler='xattn_v2',
+            patch_aggregator='xattn_v2',
             lesion_pool='xattn_v2',
         )
         self.model = CLIFOVolumeModel(

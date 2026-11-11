@@ -6,3 +6,6 @@ _datasets/
 
 # Outputs of the training runs (__v0_output/), __pycache__/, ...
 __*/
+
+# Weights
+_weights/

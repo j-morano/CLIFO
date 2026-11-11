@@ -11,9 +11,9 @@ python -m run_pretraining_vfe main_train \
     --num_epochs 10 \
     --version clifo \
     --num_queries 16 \
-    --resampler xattn_v2 \
+    --patch_aggregator xattn_v2 \
     --lesion_pool xattn_v2
 # The VFE used for downstream tasks is the checkpoint of epoch 10; copy it to _weights/CLIFO_VFE.pt, e.g.
-#   __posttraining/clifo/r-xattn_v2_lp-xattn_v2_nq-16_as-32_sk-True_fw-True/010.pt
+#   __posttraining/clifo/pa-xattn_v2_lp-xattn_v2_nq-16_as-32_sk-True_fw-True/010.pt
 # Report-generation evaluation (BLEU, ROUGE-L; needs the `report` extra):
 #   python -m run_pretraining_vfe main_val --data_root "$VLM_DATA_ROOT" --device cuda --weights _weights/CLIFO_VFE.pt

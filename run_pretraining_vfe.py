@@ -71,15 +71,15 @@ def get_factory_adder() -> Tuple[Any, Dict[str, Any]]:
 @dataclass
 class VolumeEncoderArgs:
     """Configuration for the model components.
-        - dim: The hidden dimension for the resampler and lesion
+        - dim: The hidden dimension for the patch aggregator and lesion
             aggregator.
-        - num_queries: The number of query tokens used in the resampler.
-        - resampler: The type of resampler to use.
+        - num_queries: The number of query tokens used in the patch aggregator.
+        - patch_aggregator: The type of patch aggregator to use.
         - lesion_pool: The method for aggregating lesion presence across
             slices.
     """
     num_queries: int = 8
-    resampler: str = "xattn_v2"
+    patch_aggregator: str = "xattn_v2"
     lesion_pool: str = "xattn_v2"
     use_proj: bool = False
 
@@ -104,14 +104,14 @@ class VisionToLLMProjection(nn.Module):
 
 
 #-----------------------------------------------------------------------
-# Resampler
+# Patch aggregator
 
 
-add_resampler, resampler_factory = get_factory_adder()
+add_patch_aggregator, patch_aggregator_factory = get_factory_adder()
 
 
-@add_resampler("xattn_v2")
-class QueryResampler(nn.Module):
+@add_patch_aggregator("xattn_v2")
+class PatchAggregator(nn.Module):
     def __init__(
         self,
         dim=1024,
@@ -142,7 +142,7 @@ class QueryResampler(nn.Module):
         self.self_attn = nn.MultiheadAttention(dim, num_heads, batch_first=True)
         self.ln_q2 = nn.LayerNorm(dim)
         self.ln_post2 = nn.LayerNorm(dim)
-        print("Using cross-attention (v2 with self-attention) for resampler.")
+        print("Using cross-attention (v2 with self-attention) for patch aggregation.")
 
     def forward(self, x):
         """Batched forward.
@@ -311,7 +311,7 @@ class VolumeEncoderBase:
         self.args = args
         self.device = device
         self.vm = load_vm(device)
-        self.resampler = resampler_factory[args.resampler](
+        self.patch_aggregator = patch_aggregator_factory[args.patch_aggregator](
             dim=self.vm.dim_tokens, num_queries=args.num_queries,
         ).to(device).to(torch.bfloat16)
         self.lesion_aggregator = aggregator_factory[args.lesion_pool](
@@ -346,8 +346,8 @@ class VolumeEncoderBase:
         lesion_presence = rearrange(lesion_presence, '(b s) 1 d -> b s d', b=batch_size, s=num_slices)
         lesion_presence_global = self.lesion_aggregator(lesion_presence) # [B, 2, D]
         patch_tokens = rearrange(patch_tokens, '(b s) p d -> b s p d', b=batch_size, s=num_slices)
-        resampled_patches = self.resampler(patch_tokens) # [B, Q, D]
-        combined_vis = torch.cat([resampled_patches, lesion_presence_global], dim=1)
+        aggregated_patches = self.patch_aggregator(patch_tokens) # [B, Q, D]
+        combined_vis = torch.cat([aggregated_patches, lesion_presence_global], dim=1)
         if self.args.use_proj:
             combined_vis = self.projection(combined_vis)
         return combined_vis
@@ -365,7 +365,7 @@ class VolumeFeatureEncoder(nn.Module, VolumeEncoderBase):
 
     def load_bridge(self, weights):
         checkpoint = torch.load(weights, map_location=self.device, weights_only=False)
-        self.resampler.load_state_dict(checkpoint['patch_aggregator'])
+        self.patch_aggregator.load_state_dict(checkpoint['patch_aggregator'])
         self.lesion_aggregator.load_state_dict(checkpoint['lesion_aggregator'])
         if self.args.use_proj:
             self.projection.load_state_dict(checkpoint['projection'])
@@ -386,7 +386,7 @@ class ReportModelRunner(VolumeEncoderBase):
 
     def load_weights(self, weights, device):
         checkpoint = torch.load(weights, map_location=device, weights_only=False)
-        self.resampler.load_state_dict(checkpoint['patch_aggregator'])
+        self.patch_aggregator.load_state_dict(checkpoint['patch_aggregator'])
         self.lesion_aggregator.load_state_dict(checkpoint['lesion_aggregator'])
         self.projection.load_state_dict(checkpoint['projection'])
 
@@ -469,7 +469,7 @@ class ReportModelTrainer(ReportModelRunner):
         self.dataloader = dataloader
         assert self.dataloader is not None
 
-        self.trainable_params = list(self.resampler.parameters()) \
+        self.trainable_params = list(self.patch_aggregator.parameters()) \
             + list(self.lesion_aggregator.parameters()) \
             + list(self.projection.parameters())
 
@@ -487,8 +487,8 @@ class ReportModelTrainer(ReportModelRunner):
             assert not p.requires_grad, "VM parameters should be frozen!"
         for p in self.llm.parameters():
             assert not p.requires_grad, "LLM parameters should be frozen!"
-        for p in self.resampler.parameters():
-            assert p.requires_grad, "Resampler parameters should be trainable!"
+        for p in self.patch_aggregator.parameters():
+            assert p.requires_grad, "Patch aggregator parameters should be trainable!"
         for p in self.lesion_aggregator.parameters():
             assert p.requires_grad, "Lesion aggregator parameters should be trainable!"
         for p in self.projection.parameters():
@@ -538,7 +538,7 @@ class ReportModelTrainer(ReportModelRunner):
         for param in self.llm.parameters():
             param.requires_grad = False
         # Trainable
-        self.resampler.train()
+        self.patch_aggregator.train()
         self.lesion_aggregator.train()
         self.projection.train()
 
@@ -670,7 +670,7 @@ class ReportModelTrainer(ReportModelRunner):
             print(f"Epoch {epoch+1} Average Loss: {avg_loss:.4f}")
             torch.save({
                 'epoch': epoch,
-                'patch_aggregator': self.resampler.state_dict(),
+                'patch_aggregator': self.patch_aggregator.state_dict(),
                 'lesion_aggregator': self.lesion_aggregator.state_dict(),
                 'projection': self.projection.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
@@ -841,7 +841,7 @@ def main_train(remaining_args):
     parser.add_argument("--frequency_weighted", action="store_true")
     parser.add_argument("--no_frequency_weighted", dest="frequency_weighted", action="store_false")
     parser.set_defaults(frequency_weighted=True)
-    parser.add_argument("--resampler", type=str, default="xattn_v2")
+    parser.add_argument("--patch_aggregator", type=str, default="xattn_v2")
     parser.add_argument("--lesion_pool", type=str, default="xattn_v2")
     parser.add_argument("--drop_prob", type=float, default=0.2)
     args = parser.parse_args(remaining_args)
@@ -855,7 +855,7 @@ def main_train(remaining_args):
     print("-" * 50)
     # Create string with all arg values joint
     args_to_add = [
-        'resampler',
+        'patch_aggregator',
         'lesion_pool',
         'num_queries',
         'accumulation_steps',
@@ -899,7 +899,7 @@ def main_train(remaining_args):
 
     model_args = VolumeEncoderArgs(
         num_queries=args.num_queries,
-        resampler=args.resampler,
+        patch_aggregator=args.patch_aggregator,
         lesion_pool=args.lesion_pool,
     )
 
@@ -940,7 +940,7 @@ class ReportModelInferencer(ReportModelRunner):
         print("Setting validation modes!")
         # All frozen
         self.vm.eval()
-        self.resampler.eval()
+        self.patch_aggregator.eval()
         self.lesion_aggregator.eval()
         self.projection.eval()
         self.llm.eval()
@@ -1003,7 +1003,7 @@ def main_val(remaining_args):
     epoch = Path(args.weights).stem
     if args_fn.exists():
         args_to_add = {
-            "num_queries", "dim", "resampler", "lesion_pool", "version",
+            "num_queries", "dim", "patch_aggregator", "lesion_pool", "version",
             "skip_ka"
         }
         with open(args_fn, "r") as f:
@@ -1021,7 +1021,7 @@ def main_val(remaining_args):
 
     model_args = VolumeEncoderArgs(
         num_queries=args.num_queries,
-        resampler=args.resampler,
+        patch_aggregator=args.patch_aggregator,
         lesion_pool=args.lesion_pool,
     )
 
